@@ -21,6 +21,7 @@ import rx.Observable;
 import rx.schedulers.Schedulers;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -80,7 +81,7 @@ public abstract class AbstractCouchbaseRepository {
                             });
                 })
                 .toList()
-                .firstOrDefault(new ArrayList<>(0));
+                .firstOrDefault(Collections.emptyList());
     }
 
     public void insertNonBlocking(RawJsonDocument document) {
@@ -170,7 +171,7 @@ public abstract class AbstractCouchbaseRepository {
                 })
                 .toList()
                 .toBlocking()
-                .firstOrDefault(new ArrayList<>(0));
+                .firstOrDefault(Collections.emptyList());
     }
 
     public void insertBlocking(RawJsonDocument document) {
