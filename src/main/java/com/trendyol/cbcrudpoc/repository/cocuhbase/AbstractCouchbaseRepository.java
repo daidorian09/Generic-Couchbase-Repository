@@ -7,7 +7,9 @@ import com.couchbase.client.java.ReplicaMode;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.document.RawJsonDocument;
 import com.couchbase.client.java.document.json.JsonObject;
+import com.couchbase.client.java.error.CASMismatchException;
 import com.couchbase.client.java.error.DocumentAlreadyExistsException;
+import com.couchbase.client.java.error.DocumentDoesNotExistException;
 import com.couchbase.client.java.query.AsyncN1qlQueryResult;
 import com.couchbase.client.java.query.AsyncN1qlQueryRow;
 import com.couchbase.client.java.query.Statement;
@@ -67,7 +69,7 @@ public abstract class AbstractCouchbaseRepository {
                 .timeout(BULK_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
                 .onErrorResumeNext(ex -> {
                     String commaSeparatedIds = String.join(", ", documentIds);
-                    LOGGER.warn("Error when getting documents by ids: " + commaSeparatedIds, ex);
+                    LOGGER.warn("Error when getting documents by ids: {}, Exception : {}", commaSeparatedIds, ex);
                     return Observable.from(documentIds)
                             .observeOn(io())
                             .timeout(BULK_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
@@ -96,7 +98,16 @@ public abstract class AbstractCouchbaseRepository {
                 .timeout(SINGLE_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
                 .retryWhen(RetryBuilder.any().max(RETRY_MAX_ATTEMPTS).delay(Delay.fixed(RETRY_DELAY_IN_MS, TimeUnit.MILLISECONDS)).build())
                 .doOnError(ex -> LOGGER.error("Error when deleting document with id: {} - Exception : {}" ,id, ex))
-                .singleOrDefault(null);
+                .firstOrDefault(null);
+    }
+
+    public void updateNonBlocking(RawJsonDocument document) {
+        bucket.replace(document)
+                .timeout(SINGLE_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
+                .doOnError(ex -> LOGGER.error("Error when updating document. Id: {} - Document: {} - Exception : {}", document.id(), document.content(), ex))
+                .retryWhen(RetryBuilder.allBut(DocumentDoesNotExistException.class, CASMismatchException.class).max(RETRY_MAX_ATTEMPTS).delay(Delay.fixed(RETRY_DELAY_IN_MS, TimeUnit.MILLISECONDS)).build())
+                .observeOn(io())
+                .first();
     }
 
     public Observable<List<JsonObject>> filterNonBlocking(Statement query) {
@@ -147,7 +158,7 @@ public abstract class AbstractCouchbaseRepository {
                 .timeout(BULK_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
                 .onErrorResumeNext(ex -> {
                     String commaSeparatedIds = String.join(", ", documentIds);
-                    LOGGER.warn("Error when getting documents by ids: " + commaSeparatedIds, ex);
+                    LOGGER.warn("Error when getting documents by ids: {}, Exception : {}", commaSeparatedIds, ex);
                     return Observable.from(documentIds)
                             .observeOn(io())
                             .timeout(BULK_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
@@ -180,6 +191,16 @@ public abstract class AbstractCouchbaseRepository {
                 .doOnError(ex -> LOGGER.error("Error when deleting document with id: {} - Exception : {}" ,id, ex))
                 .toBlocking()
                 .firstOrDefault(null);
+    }
+
+    public void updateBlocking(RawJsonDocument document) {
+        bucket.replace(document)
+                .timeout(SINGLE_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS)
+                .doOnError(ex -> LOGGER.error("Error when updating document. Id: {} - Document: {} - Exception : {}", document.id(), document.content(), ex))
+                .retryWhen(RetryBuilder.allBut(DocumentDoesNotExistException.class, CASMismatchException.class).max(RETRY_MAX_ATTEMPTS).delay(Delay.fixed(RETRY_DELAY_IN_MS, TimeUnit.MILLISECONDS)).build())
+                .observeOn(io())
+                .toBlocking()
+                .first();
     }
 
     public List<JsonObject> filterBlocking(Statement query) {
